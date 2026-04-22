@@ -10,6 +10,7 @@ A production-grade, memory-optimized ETL pipeline that consolidates **6M+ record
 
 ![Image](https://github.com/user-attachments/assets/25882460-ba32-40d8-baa9-34ac5d81b430)
 Author: Susan Ho
+
 Date: 2026-02-20
 
 ---
