@@ -16,17 +16,17 @@ Date: 2026-02-20
 
 ## 📋 Table of Contents
 
-1. [🔍 Overview](#1--overview)
-2. [🏗 Architecture](#2--architecture)
-3. [📐 Data Model](#3-data-model-star-schema)
-4. [🎯 RFM Customer Segmentation](#4-rfm-customer-segmentation)
-5. [📁 Project Structure](#5-project-structure)
-6. [🛠 Tech Stack](#6-tech-stack)
-7. [🚀 Setup & Installation](#7-setup--installation)
-8. [▶️ Usage](#8-usage)
-9. [⚙️ Pipeline Execution Flow](#9-pipeline-execution-flow)
-10. [✅ Data Quality](#10-data-quality)
-11. [📊 Power BI Dashboards](#11-power-bi-dashboards)
+1. [🔍 Overview](#overview)
+2. [🏗 Architecture](#architecture)
+3. [📐 Data Model](#data-model-star-schema)
+4. [🎯 RFM Customer Segmentation](#rfm-customer-segmentation)
+5. [📁 Project Structure](#project-structure)
+6. [🛠 Tech Stack](#tech-stack)
+7. [🚀 Setup & Installation](#setup--installation)
+8. [▶️ Usage](#usage)
+9. [⚙️ Pipeline Execution Flow](#pipeline-execution-flow)
+10. [✅ Data Quality](#data-quality)
+11. [📊 Power BI Dashboards](#power-bi-dashboards)
 
 ---
 
