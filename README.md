@@ -30,7 +30,7 @@ Date: 2026-02-20
 
 ---
 
-## 1. 🔍 Overview
+## 🔍 Overview
 
 **TechStore Vietnam** is a technology retail chain operating across multiple sales channels. This project builds an automated data pipeline to:
 
@@ -53,7 +53,7 @@ Date: 2026-02-20
 
 ---
 
-## 2. 🏗 Architecture
+## 🏗 Architecture
 
 ### Medallion Architecture
 
@@ -117,7 +117,7 @@ Phase F: Aggregates      → update customer RFM → create views
 
 ---
 
-## 3. 📐 Data Model (Star Schema)
+## 📐 Data Model (Star Schema)
 
 ```
                           ┌──────────────────┐
