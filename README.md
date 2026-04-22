@@ -16,17 +16,17 @@ Date: 2026-02-20
 
 ## 📋 Table of Contents
 
-1. [🔍 Overview](#overview)
-2. [🏗 Architecture](#architecture)
-3. [📐 Data Model](#data-model-star-schema)
-4. [🎯 RFM Customer Segmentation](#rfm-customer-segmentation)
-5. [📁 Project Structure](#project-structure)
-6. [🛠 Tech Stack](#tech-stack)
-7. [🚀 Setup & Installation](#setup--installation)
-8. [▶️ Usage](#usage)
-9. [⚙️ Pipeline Execution Flow](#pipeline-execution-flow)
-10. [✅ Data Quality](#data-quality)
-11. [📊 Power BI Dashboards](#power-bi-dashboards)
+1. [🔍 Overview](#-overview)
+2. [🏗 Architecture](#-architecture)
+3. [📐 Data Model (Star Schema)](#-data-model-star-schema)
+4. [🎯 RFM Customer Segmentation](#-rfm-customer-segmentation)
+5. [📁 Project Structure](#-project-structure)
+6. [🛠 Tech Stack](#-tech-stack)
+7. [🚀 Setup & Installation](#-setup--installation)
+8. [▶️ Usage](#-usage)
+9. [⚙️ Pipeline Execution Flow](#-pipeline-execution-flow)
+10. [✅ Data Quality](#-data-quality)
+11. [📊 Power BI Dashboards](#-power-bi-dashboards)
 
 ---
 
@@ -172,7 +172,7 @@ Phase F: Aggregates      → update customer RFM → create views
 
 ---
 
-## 4. 🎯 RFM Customer Segmentation
+## 🎯 RFM Customer Segmentation
 
 Customers are scored using **NTILE(5)** across three axes, then mapped to **11 actionable segments**:
 
@@ -200,7 +200,7 @@ Customers are scored using **NTILE(5)** across three axes, then mapped to **11 a
 
 ---
 
-## 5. 📁 Project Structure
+## 📁 Project Structure
 
 ```
 E-commerce-Analytics-ETL-Pipeline/
@@ -248,7 +248,7 @@ E-commerce-Analytics-ETL-Pipeline/
 
 ---
 
-## 6. 🛠 Tech Stack
+## 🛠 Tech Stack
 
 | Category | Technology |
 |---|---|
@@ -264,7 +264,7 @@ E-commerce-Analytics-ETL-Pipeline/
 
 ---
 
-## 7. 🚀 Setup & Installation
+## 🚀 Setup & Installation
 
 ### 1. Clone the repository
 
@@ -300,7 +300,7 @@ cp .env.example .env
 
 ---
 
-## 8. ▶️ Usage
+## ▶️ Usage
 
 ```bash
 # Run the full ETL pipeline
@@ -333,7 +333,7 @@ python main.py --info
 
 ---
 
-## 9. ⚙️ Pipeline Execution Flow
+## ⚙️ Pipeline Execution Flow
 
 ```
 python main.py --full
@@ -388,7 +388,7 @@ python main.py --full
 
 ---
 
-## 10. ✅ Data Quality
+## ✅ Data Quality
 
 Automated quality checks run at every transformation step:
 
@@ -404,7 +404,7 @@ Quality issues are accumulated in a `quality_report` dict and displayed in the f
 
 ---
 
-## 11. 📊 Power BI Dashboards
+## 📊 Power BI Dashboards
 
 The pipeline creates **3 analytical views** in BigQuery, consumed directly by Power BI:
 
