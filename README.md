@@ -2,7 +2,7 @@
 
 A production-grade, memory-optimized ETL pipeline that consolidates **6M+ records** from multiple e-commerce platforms, payment gateways, and user tracking systems into a **Google BigQuery** Star Schema data warehouse — powering **3 Power BI dashboards** for business intelligence.
 
-> **Note:** This repository is intended for **technical readers** — engineers, data practitioners, and technical leads. If you are looking for a business-focused overview of this project, please visit the
+> **Note:** This repository is intended for **technical readers** — engineers, data practitioners, and technical leads. If you are looking for a business-focused overview of this project, please visit the [Portfolio Page](https://hothanhxuan.github.io/)  
 
 ![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Google BigQuery](https://img.shields.io/badge/Google_BigQuery-4285F4?style=flat-square&logo=googlebigquery&logoColor=white)
