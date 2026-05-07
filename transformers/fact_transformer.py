@@ -628,12 +628,31 @@ class FactTransformer(BaseTransformer):
 
         for txn in mercury_transactions:
             details = txn.get("details", {}) or {}
+            kind = txn.get("kind", "").lower()
+
+            # Mercury stores amounts as positive absolute values.
+            # Apply sign based on transaction kind so outflows become negative.
+            amount_usd = float(txn.get("amount_usd", txn.get("amount", 0.0)))
+            amount_vnd = int(txn.get("amount_vnd", 0))
+
+            is_outflow = any(kw in kind for kw in (
+                "debit", "outgoing", "sent", "withdraw", "payment",
+                "external_debit", "externaldebit",
+            ))
+            # Exclude false positives: "incomingPayment", "receivedPayment"
+            is_inflow_override = any(kw in kind for kw in (
+                "incoming", "received", "credit", "deposit",
+            ))
+            if is_outflow and not is_inflow_override:
+                amount_usd = -abs(amount_usd)
+                amount_vnd = -abs(amount_vnd)
+
             records.append({
                 "transaction_id": txn.get("transaction_id", ""),
                 "account_id": txn.get("accountId", ""),
                 "transaction_type": txn.get("kind", ""),
-                "amount_usd": txn.get("amount_usd", txn.get("amount", 0.0)),
-                "amount_vnd": txn.get("amount_vnd", 0),
+                "amount_usd": amount_usd,
+                "amount_vnd": amount_vnd,
                 "status": txn.get("status", ""),
                 "description": txn.get("bankDescription", ""),
                 "counterparty": details.get("counterpartyName", ""),
