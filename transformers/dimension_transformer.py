@@ -62,6 +62,24 @@ class DimensionTransformer(BaseTransformer):
         df["first_order_date"] = pd.NaT
         df["last_order_date"] = pd.NaT
 
+        # Add Unknown/Walk-in customer (sentinel ID = -1) for orders without customer profiles
+        unknown_customer = pd.DataFrame([{
+            "customer_id": -1,
+            "email": "unknown@techstore.vn",
+            "full_name": "Unknown / Walk-in",
+            "phone": None,
+            "city": "Unknown",
+            "country": "Vietnam",
+            "created_at": pd.NaT,
+            "customer_segment": "Unknown",
+            "lifetime_value_vnd": 0,
+            "total_orders": 0,
+            "first_order_date": pd.NaT,
+            "last_order_date": pd.NaT,
+        }])
+        df = pd.concat([df, unknown_customer], ignore_index=True)
+        self.logger.info("  Added Unknown/Walk-in customer (ID: -1) for unmatched orders")
+
         # Data quality checks
         df = self.check_nulls(df, ["customer_id", "email"], "dim_customers")
         df = self.check_duplicates(df, ["customer_id"], "dim_customers")

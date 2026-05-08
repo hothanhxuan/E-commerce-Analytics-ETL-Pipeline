@@ -195,9 +195,17 @@ class FactTransformer(BaseTransformer):
         result["total_usd"] = pd.to_numeric(result["total_usd"], errors="coerce").fillna(0.0)
         result["customer_id"] = pd.to_numeric(result["customer_id"], errors="coerce").astype("Int64")
 
+        # Handle null customer_id: assign sentinel value -1 (Unknown/Walk-in)
+        null_count = result["customer_id"].isna().sum()
+        if null_count > 0:
+            self.logger.info(
+                f"  Assigning {null_count} null customer_ids to -1 (Unknown/Walk-in)"
+            )
+            result["customer_id"] = result["customer_id"].fillna(-1).astype("Int64")
+
         # Data quality checks
         result = self.check_nulls(
-            result, ["order_id", "customer_id", "total_vnd"], "fact_orders"
+            result, ["order_id", "total_vnd"], "fact_orders"
         )
         result = self.check_duplicates(result, ["order_key"], "fact_orders")
         result = self.validate_date_range(result, "order_date", table_name="fact_orders")
