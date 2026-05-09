@@ -1,7 +1,19 @@
-docs
+# Credentials & secrets
 .env
+config/minpyws-e52b3983be71.json
+
+# Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# Logs (generated at runtime)
+logs/
+
+# IDE & OS
 .vscode/
 .DS_Store
-config/minpyws-e52b3983be71.json
+
+# Misc
+get-pip.py
+*.pbix

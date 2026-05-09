@@ -56,7 +56,7 @@ class DimensionTransformer(BaseTransformer):
         df = df[dim_columns].copy()
 
         # Initialize aggregation columns (to be updated after fact tables are loaded)
-        df["customer_segment"] = "New"
+        df["customer_segment"] = "No Purchase"
         df["lifetime_value_vnd"] = 0
         df["total_orders"] = 0
         df["first_order_date"] = pd.NaT
@@ -349,13 +349,16 @@ class DimensionTransformer(BaseTransformer):
         Returns:
             DataFrame with customer_segment column updated.
         """
-        # Separate customers WITH orders vs WITHOUT orders
-        has_orders = df["total_orders"] > 0
+        # Separate customers: WITH orders vs WITHOUT orders vs Unknown (ID=-1)
+        is_unknown = df["customer_id"] == -1
+        has_orders = (df["total_orders"] > 0) & (~is_unknown)
         active = df[has_orders].copy()
-        inactive = df[~has_orders].copy()
+        inactive = df[(~has_orders) & (~is_unknown)].copy()
+        unknown = df[is_unknown].copy()
 
         if active.empty:
-            df["customer_segment"] = "New"
+            df["customer_segment"] = "No Purchase"
+            df.loc[df["customer_id"] == -1, "customer_segment"] = "Unknown"
             return df
 
         # ── Step 1: Calculate Recency (days since last order) ──
@@ -401,11 +404,14 @@ class DimensionTransformer(BaseTransformer):
         # Clean up temporary columns
         active = active.drop(columns=["recency_days", "r_score", "f_score", "m_score"])
 
-        # Assign "New" to customers with no orders
-        inactive["customer_segment"] = "New"
+        # Assign "No Purchase" to customers with no orders
+        inactive["customer_segment"] = "No Purchase"
+
+        # Preserve "Unknown" for walk-in customers (ID = -1)
+        unknown["customer_segment"] = "Unknown"
 
         # Recombine
-        result = pd.concat([active, inactive], ignore_index=True)
+        result = pd.concat([active, inactive, unknown], ignore_index=True)
         return result
 
     @staticmethod
