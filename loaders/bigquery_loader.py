@@ -215,9 +215,9 @@ class BigQueryLoader:
             GROUP BY customer_id
         )
         SELECT
-            e.customer_id,\r
-            COALESCE(c.full_name, 'Unknown') AS full_name,\r
-            COALESCE(c.customer_segment, 'Unknown') AS customer_segment,
+            e.customer_id,
+            COALESCE(c.full_name, 'Anonymous Visitor') AS full_name,
+            COALESCE(c.customer_segment, 'Anonymous Visitor') AS customer_segment,
             e.session_id,
             e.event_type,
             e.event_timestamp,
