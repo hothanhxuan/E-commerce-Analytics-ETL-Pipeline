@@ -337,10 +337,9 @@ class DimensionTransformer(BaseTransformer):
           - Score 5 = best (most recent, most frequent, highest spending)
           - Score 1 = worst
 
-        The 11 segments are mapped from combined R+F scores:
-          Champions, Loyal, Potential Loyalist, Promising, New Customer,
-          Need Attention, About To Sleep, At Risk, Cannot Lose Them,
-          Hibernating, Lost
+        The segments are mapped to 5 macro categories:
+          VIP / Best Customers, Growing / Potential, Needs Attention,
+          At Risk, Lost / Inactive
 
         Args:
             df: dim_customers DataFrame with total_orders, lifetime_value_vnd,
@@ -362,7 +361,10 @@ class DimensionTransformer(BaseTransformer):
             return df
 
         # ── Step 1: Calculate Recency (days since last order) ──
-        now = pd.Timestamp.now()
+        # Use MAX(last_order_date) as reference instead of today,
+        # so recency is relative to the dataset's time window.
+        now = active["last_order_date"].max()
+        self.logger.info(f"  RFM reference date (max order_date): {now}")
         active["recency_days"] = active["last_order_date"].apply(
             lambda x: (now - pd.Timestamp(x)).days if pd.notna(x) else 9999
         )
@@ -417,45 +419,32 @@ class DimensionTransformer(BaseTransformer):
     @staticmethod
     def _map_rfm_segment(r_score: int, f_score: int) -> str:
         """
-        Map R (Recency) and F (Frequency) scores to a named segment.
-
-        Uses the standard RFM segmentation matrix:
-
-            F\\R │  5  │  4  │  3  │  2  │  1
-            ────┼─────┼─────┼─────┼─────┼─────
-             5  │ Champions │ Champions │ Loyal │ At Risk │ Cannot Lose
-             4  │ Champions │ Loyal     │ Loyal │ At Risk │ Cannot Lose
-             3  │ Pot.Loyal │ Need Att. │ Need Att. │ About Sleep │ Hibernating
-             2  │ Promising │ Promising │ About Sleep │ Hibernating │ Lost
-             1  │ New Cust. │ Promising │ About Sleep │ Hibernating │ Lost
+        Map R (Recency) and F (Frequency) scores to a 5-tier macro segment.
 
         Args:
             r_score: Recency score (1-5, 5 = most recent).
             f_score: Frequency score (1-5, 5 = most frequent).
 
         Returns:
-            Named customer segment string.
+            Named macro customer segment string.
         """
-        if r_score >= 4 and f_score >= 4:
-            return "Champions"
-        elif r_score >= 3 and f_score >= 4:
-            return "Loyal"
-        elif r_score >= 4 and f_score == 3:
-            return "Potential Loyalist"
-        elif r_score >= 4 and f_score == 2:
-            return "Promising"
-        elif r_score >= 4 and f_score == 1:
-            return "New Customer"
-        elif r_score == 3 and f_score == 3:
-            return "Need Attention"
-        elif (r_score == 3 and f_score <= 2) or (r_score == 2 and f_score == 2):
-            return "About To Sleep"
-        elif r_score == 2 and f_score >= 4:
+        # VIP (R >= 3 and F >= 4) -> Champions, Loyal
+        if r_score >= 3 and f_score >= 4:
+            return "VIP / Best Customers"
+            
+        # Growing (R >= 4 and F <= 3) -> Potential Loyalist, Promising, New
+        elif r_score >= 4 and f_score <= 3:
+            return "Growing / Potential"
+            
+        # Needs Attention (R=3/F<=3 or R=2/F=2) -> Need Attention, About To Sleep
+        elif (r_score == 3 and f_score <= 3) or (r_score == 2 and f_score == 2):
+            return "Needs Attention"
+            
+        # At Risk (R <= 2 and F >= 4) -> At Risk, Cannot Lose Them
+        elif r_score <= 2 and f_score >= 4:
             return "At Risk"
-        elif r_score == 1 and f_score >= 4:
-            return "Cannot Lose Them"
-        elif (r_score == 2 and f_score == 3) or (r_score == 1 and f_score <= 2):
-            return "Lost"
+            
+        # Lost / Inactive (Everything else) -> Lost, Hibernating
         else:
-            return "Hibernating"
+            return "Lost / Inactive"
 

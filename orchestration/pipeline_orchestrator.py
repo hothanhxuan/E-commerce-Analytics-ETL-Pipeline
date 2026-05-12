@@ -41,6 +41,53 @@ def _force_gc():
     gc.collect()
 
 
+def _lower_process_priority():
+    """Lower this process's priority so the desktop stays responsive.
+    
+    Sets priority to BELOW_NORMAL on Windows, or 'nice' on Linux/Mac.
+    This prevents the ETL from starving Explorer, VS Code, and other apps.
+    """
+    import os
+    import sys
+    try:
+        if sys.platform == "win32":
+            import ctypes
+            # BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            ctypes.windll.kernel32.SetPriorityClass(handle, 0x00004000)
+        else:
+            os.nice(10)  # Lower priority on Unix
+    except Exception:
+        pass  # Non-critical — best effort
+
+
+def _check_memory_safety(logger, threshold_pct=85):
+    """Warn if system memory usage is above threshold.
+    
+    Args:
+        logger: Logger instance.
+        threshold_pct: Memory usage percentage that triggers a warning.
+        
+    Returns:
+        True if memory is safe, False if dangerously high.
+    """
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        used_pct = mem.percent
+        avail_mb = mem.available / (1024 * 1024)
+        if used_pct > threshold_pct:
+            logger.warning(
+                f"⚠ HIGH MEMORY: {used_pct:.0f}% used, "
+                f"only {avail_mb:.0f} MB available. "
+                f"Consider closing other applications."
+            )
+            return False
+        return True
+    except ImportError:
+        return True  # Can't check without psutil — assume OK
+
+
 class PipelineOrchestrator:
     """Orchestrates the full ETL pipeline for TechStore Vietnam.
     
@@ -108,6 +155,10 @@ class PipelineOrchestrator:
         self.logger.info(f"Timestamp: {datetime.now().isoformat()}")
         self.logger.info("=" * 60)
 
+        # Lower process priority so the desktop stays responsive
+        _lower_process_priority()
+        self.logger.info("Process priority lowered to BELOW_NORMAL (desktop-safe mode)")
+
         try:
             # Step 1: Create BigQuery dataset
             self._step_create_dataset()
@@ -161,6 +212,7 @@ class PipelineOrchestrator:
             # PHASE B: Order facts (medium data)
             # ────────────────────────────────────
             self.logger.info("─" * 40)
+            _check_memory_safety(self.logger)
             self.logger.info(f"PHASE B: ORDER FACTS{_log_memory()}")
 
             shopify_orders = self.shopify_extractor.extract_orders()
@@ -227,30 +279,49 @@ class PipelineOrchestrator:
             _force_gc()
 
             # ────────────────────────────────────
-            # PHASE D: Cart events (LARGE — memory critical)
+            # PHASE D: Cart events (LARGE — stream-to-BQ, never holds full DF)
             # ────────────────────────────────────
             self.logger.info("─" * 40)
-            self.logger.info(f"PHASE D: CART EVENTS (large file — chunked mode){_log_memory()}")
+            _check_memory_safety(self.logger)
+            self.logger.info(f"PHASE D: CART EVENTS (stream-to-BigQuery mode){_log_memory()}")
 
-            # Use chunked extraction + transformation to minimize peak memory
-            cart_chunks = self.tracking_extractor.extract_cart_events_chunked(chunk_size=50000)
-            self.transformed["fact_cart_events"] = self.fact_transformer.transform_fact_cart_events_chunked(
-                cart_chunks
-            )
-            _force_gc()
+            # Stream each chunk directly to BigQuery to avoid holding the
+            # entire cart events DataFrame in RAM (the #1 crash cause).
+            # Chunk size reduced to 20,000 for safer peak memory.
+            cart_chunks = self.tracking_extractor.extract_cart_events_chunked(chunk_size=20000)
+            total_cart_rows = 0
+            chunk_num = 0
 
-            self._load_tables({
-                "fact_cart_events": {
-                    "partition_field": "event_timestamp",
-                    "clustering_fields": ["customer_id", "session_id", "event_type"],
-                },
-            }, label="Cart event facts")
+            for chunk in cart_chunks:
+                chunk_num += 1
+                self.logger.info(f"  Cart chunk {chunk_num}: transforming {len(chunk)} records...{_log_memory()}")
 
-            # Free the large DataFrame after loading
-            del self.transformed["fact_cart_events"]
-            _force_gc()
+                # Transform this single chunk
+                chunk_df = self.fact_transformer.transform_fact_cart_events(chunk)
+                del chunk
+                _force_gc()
 
-            self.logger.info(f"Phase D complete.{_log_memory()}")
+                if chunk_df.empty:
+                    continue
+
+                # Load directly to BigQuery:
+                # First chunk truncates (resets table), subsequent chunks append.
+                disposition = "WRITE_TRUNCATE" if chunk_num == 1 else "WRITE_APPEND"
+                self.loader.load_dataframe(
+                    table_name="fact_cart_events",
+                    df=chunk_df,
+                    write_disposition=disposition,
+                    partition_field="event_timestamp",
+                    clustering_fields=["customer_id", "session_id", "event_type"],
+                )
+                total_cart_rows += len(chunk_df)
+                self.logger.info(f"  Cart chunk {chunk_num} loaded ({len(chunk_df)} rows). Total: {total_cart_rows:,}{_log_memory()}")
+
+                del chunk_df
+                _force_gc()
+
+            self._row_counts["fact_cart_events"] = total_cart_rows
+            self.logger.info(f"Phase D complete. Total cart events: {total_cart_rows:,}{_log_memory()}")
 
             # ────────────────────────────────────
             # PHASE E: Bank transactions (small)
