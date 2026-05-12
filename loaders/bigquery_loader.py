@@ -339,7 +339,9 @@ class BigQueryLoader:
         LEFT JOIN `{self.dataset_ref}.dim_customers` c
             ON o.customer_id = c.customer_id
         LEFT JOIN `{self.dataset_ref}.fact_payments` p
-            ON o.transaction_id = p.transaction_id
+            ON CAST(o.transaction_id AS STRING) = CAST(p.transaction_id AS STRING)
+            AND p.transaction_id IS NOT NULL 
+            AND CAST(p.transaction_id AS STRING) NOT IN ('', '0', 'None', 'null')
         """
 
     def get_table_info(self, table_name: str) -> dict:
