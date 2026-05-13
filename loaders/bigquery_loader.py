@@ -183,7 +183,11 @@ class BigQueryLoader:
                 self.logger.error(f"Failed to create view '{view_name}': {e}")
 
     def _get_customer_journey_view_sql(self) -> str:
-        """SQL for vw_customer_journey view."""
+        """SQL for vw_customer_journey view.
+
+        Includes Channel Attribution columns (first/last touch) and
+        total touchpoint count per customer for journey analysis.
+        """
         return f"""
         CREATE OR REPLACE VIEW `{self.dataset_ref}.vw_customer_journey` AS
         WITH customer_events AS (
@@ -200,7 +204,32 @@ class BigQueryLoader:
                 ROW_NUMBER() OVER (
                     PARTITION BY ce.customer_id
                     ORDER BY ce.event_timestamp
-                ) AS touchpoint_sequence
+                ) AS touchpoint_sequence,
+                -- ── Channel Attribution ──
+                FIRST_VALUE(ce.source) OVER (
+                    PARTITION BY ce.customer_id
+                    ORDER BY ce.event_timestamp
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                ) AS first_touch_channel,
+                LAST_VALUE(ce.source) OVER (
+                    PARTITION BY ce.customer_id
+                    ORDER BY ce.event_timestamp
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                ) AS last_touch_channel,
+                FIRST_VALUE(ce.device) OVER (
+                    PARTITION BY ce.customer_id
+                    ORDER BY ce.event_timestamp
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                ) AS first_touch_device,
+                LAST_VALUE(ce.device) OVER (
+                    PARTITION BY ce.customer_id
+                    ORDER BY ce.event_timestamp
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+                ) AS last_touch_device,
+                -- ── Total touchpoints per customer ──
+                COUNT(*) OVER (
+                    PARTITION BY ce.customer_id
+                ) AS total_touchpoints
             FROM `{self.dataset_ref}.fact_cart_events` ce
             WHERE ce.customer_id IS NOT NULL
         ),
@@ -222,11 +251,16 @@ class BigQueryLoader:
             e.event_type,
             e.event_timestamp,
             e.touchpoint_sequence,
+            e.total_touchpoints,
             e.product_id,
             e.traffic_source,
             e.device,
             e.utm_source,
             e.utm_campaign,
+            e.first_touch_channel,
+            e.last_touch_channel,
+            e.first_touch_device,
+            e.last_touch_device,
             p.first_purchase_date,
             p.total_purchases,
             p.total_revenue_vnd,
