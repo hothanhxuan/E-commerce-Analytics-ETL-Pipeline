@@ -1,8 +1,5 @@
 # BigQuery Schema Configuration for TechStore Vietnam
-bigquery:
-  project_id: "minpyws"
-  dataset: "techstore_analytics"
-  location: "US"
+
 
 # Dimension Tables
 dimensions:
