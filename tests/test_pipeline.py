@@ -379,6 +379,5 @@ class TestLogger(unittest.TestCase):
         logger2 = setup_logger("unique_test_logger")
         self.assertEqual(len(logger2.handlers), handler_count)
 
-
 if __name__ == "__main__":
     unittest.main(verbosity=2)
