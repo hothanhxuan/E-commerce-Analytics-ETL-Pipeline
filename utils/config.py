@@ -58,7 +58,6 @@ def get_credentials() -> service_account.Credentials:
         cred_path, scopes=SCOPES
     )
 
-
 def get_project_id() -> str:
     """Get GCP project ID from .env."""
     return os.getenv("GCP_PROJECT_ID", "minpyws")
