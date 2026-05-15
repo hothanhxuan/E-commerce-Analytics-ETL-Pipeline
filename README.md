@@ -48,7 +48,7 @@ Date: 2026-02-20
 |---|---|
 | 🧠 **Memory-Optimized** | Phased execution with `ijson` streaming & chunked processing — runs on 8GB RAM |
 | 📊 **10-Table Star Schema** | 5 dimensions + 5 fact tables with surrogate keys (MD5 hash) |
-| 🎯 **RFM Segmentation** | NTILE(5) scoring → 11 customer segments, auto-updated after each pipeline run |
+| 🎯 **RFM Segmentation** | NTILE(5) scoring → 5 macro-segments, auto-updated after each pipeline run |
 | ✅ **Data Quality** | Automated null checks, duplicate removal, date validation, outlier detection (3σ) |
 | 🔄 **Auto-Recovery** | BigQuery loader auto-retries on partitioning conflicts |
 | 📈 **3 Analytical Views** | Customer Journey, Daily Cashflow, Payment Status — ready for Power BI |
@@ -131,7 +131,7 @@ Phase F: Aggregates      → update customer RFM → create views
                           │ customer_id (PK) │
                           │ email            │
                           │ full_name        │
-                          │ customer_segment │◄── RFM (11 segments)
+                          │ customer_segment │◄── RFM (5 macro-segments)
                           │ lifetime_value   │
                           │ total_orders     │
                           └────────┬─────────┘
@@ -385,7 +385,7 @@ python main.py --full
         │
         ▼
 ┌─── Phase F: AGGREGATES & VIEWS ───────────────────────────────┐
-│  Update dim_customers with RFM segmentation (11 segments)     │
+│  Update dim_customers with RFM segmentation (5 macro-segments)│
 │  Create 3 analytical views for Power BI                       │
 │  Print execution summary + data quality report                │
 └───────────────────────────────────────────────────────────────┘
