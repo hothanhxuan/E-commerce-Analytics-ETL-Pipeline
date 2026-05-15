@@ -1,4 +1,3 @@
-#Data Type: Pipeline
 from google.cloud import storage
 import gzip
 import json
