@@ -49,6 +49,7 @@ Date: 2026-02-20
 | 🧠 **Memory-Optimized** | Phased execution with `ijson` streaming & chunked processing — runs on 8GB RAM |
 | 📊 **10-Table Star Schema** | 5 dimensions + 5 fact tables with surrogate keys (MD5 hash) |
 | 🎯 **RFM Segmentation** | NTILE(5) scoring → 5 macro-segments, auto-updated after each pipeline run |
+| ⚠️ **Risk Scoring** | Automated calculation of A/R Aging Buckets (0-7, 8-14 days, etc.) and customer Risk Scores (1-5) |
 | ✅ **Data Quality** | Automated null checks, duplicate removal, date validation, outlier detection (3σ) |
 | 🔄 **Auto-Recovery** | BigQuery loader auto-retries on partitioning conflicts |
 | 📈 **3 Analytical Views** | Customer Journey, Daily Cashflow, Payment Status — ready for Power BI |
@@ -431,6 +432,11 @@ During the ETL and Data Modeling phase, a comprehensive audit of the raw data re
 * The raw data from Shopify and Sapo POS shared overlapping `order_id` values (e.g., Order `1001` existed in both systems for different purchases). 
 * **Impact:** This required the engineering of a surrogate `order_key` during the ETL process. Failing to do so (and relying on the origin IDs) caused the total order count to incorrectly collapse from 705K down to 170K due to deduplication errors in Power BI.
 
+**5. Massive Volume of Orphaned Orders**
+* A data anomaly resulted in over 400,000 "orphan" order records—orders tied to a `customer_id` that does not exist anywhere in the customer database (`dim_customers`).
+* **Impact:** Loading these into BigQuery and Power BI would break referential integrity, causing blank dimensions and skewing LTV calculations.
+* **Solution:** A strict referential integrity filter was engineered directly into the ETL Pipeline Orchestrator (Phase B). The pipeline dynamically cross-references `fact_orders` against valid keys in `dim_customers` (allowing `-1` for unknown walk-ins) and forcefully drops all orphan records *before* they are loaded into the data warehouse.
+
 ### 🎯 Strategic Pivot
 Because the synthetic origin data breaks standard behavioral models, we cannot reliably fulfill requirements heavily dependent on the web-tracking log (such as end-to-end Funnels). 
 
@@ -447,5 +453,5 @@ The pipeline creates **3 analytical views** in BigQuery, consumed directly by Po
 |---|---|
 | `vw_customer_journey` | Tracks customer touchpoints from first click to purchase, with days-to-conversion metric |
 | `vw_cashflow_daily` | Daily report combining sales revenue, payment receipts, and bank inflows/outflows |
-| `vw_payment_status` | Classifies every order as Paid / Failed / Pending / Overdue with delay metrics |
+| `vw_payment_status` | Classifies every order as Paid / Failed / Pending / Overdue with delay metrics, dynamic Aging Buckets, and Risk Scores |
 
