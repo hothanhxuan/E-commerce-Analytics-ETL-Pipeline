@@ -365,10 +365,26 @@ class BigQueryLoader:
                 ELSE 0
             END AS outstanding_amount_vnd,
             CASE
-                WHEN p.payment_date IS NULL AND TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), o.order_date, DAY) > 30 THEN
-                    TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), o.order_date, DAY)
+                WHEN p.payment_date IS NULL THEN
+                    TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY)
                 ELSE 0
-            END AS days_overdue
+            END AS days_overdue,
+            CASE
+                WHEN p.payment_date IS NOT NULL THEN 'Paid'
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 7 THEN '1. 0-7 days'
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 14 THEN '2. 8-14 days'
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 30 THEN '3. 15-30 days'
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 60 THEN '4. 31-60 days'
+                ELSE '5. 60+ days'
+            END AS aging_bucket,
+            CASE
+                WHEN p.payment_date IS NOT NULL THEN 0
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 7 THEN 1
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 14 THEN 2
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 30 THEN 3
+                WHEN TIMESTAMP_DIFF((SELECT MAX(order_date) FROM `{self.dataset_ref}.fact_orders`), o.order_date, DAY) <= 60 THEN 4
+                ELSE 5
+            END AS risk_score
         FROM `{self.dataset_ref}.fact_orders` o
         LEFT JOIN `{self.dataset_ref}.dim_customers` c
             ON o.customer_id = c.customer_id

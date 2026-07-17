@@ -1,0 +1,445 @@
+-- =============================================================
+-- TechStore Vietnam — Power BI DAX Measures Reference
+-- Project: Building an Omnichannel Retail ETL Pipeline
+-- =============================================================
+-- HOW TO USE:
+--   In Power BI Desktop → Modeling tab → New Measure
+--   Copy each measure below and paste into the formula bar.
+--   Organize measures into a dedicated "Measures" table:
+--     Home → Enter Data → name it "_Measures" → Load
+--     Then move all measures into this table.
+-- =============================================================
+
+
+-- ─────────────────────────────────────────────────────────────
+-- SECTION 0: SHARED / BASE MEASURES (used across all dashboards)
+-- ─────────────────────────────────────────────────────────────
+
+Total Revenue VND =
+SUM ( fact_orders[total_vnd] )
+
+Total Orders =
+COUNTROWS ( fact_orders )
+
+Total Customers =
+DISTINCTCOUNT ( dim_customers[customer_id] )
+
+
+-- ─────────────────────────────────────────────────────────────
+-- SECTION 1: DASHBOARD 1 — CUSTOMER JOURNEY
+-- Source tables: dim_customers, fact_orders, vw_customer_journey
+-- ─────────────────────────────────────────────────────────────
+-- ┌─────────────────────────────────────────────────────────────────┐
+-- │  TOP ROW SCORE CARDS (5 cards, left → right):                  │
+-- │  [1] Total Customers  [2] Active Customers  [3] Avg LTV VND   │
+-- │  [4] Avg Orders Per Customer   [5] New Customers               │
+-- └─────────────────────────────────────────────────────────────────┘
+
+-- KPI: Total unique customers (excludes Unknown ID=-1 walk-in)
+Total Customers =
+CALCULATE (
+    DISTINCTCOUNT ( dim_customers[customer_id] ),
+    dim_customers[customer_id] <> -1
+)
+
+-- KPI: Customers who placed at least 1 order
+-- FIX: Calculate dynamically from fact_orders to ensure it responds to date 
+--      slicers and doesn't out on dim_customers[total_orders] being populated.
+Active Customers =
+CALCULATE (
+    DISTINCTCOUNT ( fact_orders[customer_id] ),
+    fact_orders[customer_id] <> -1
+)
+
+-- KPI: Average lifetime value per customer (VND)
+-- FIX: Calculate dynamically: gets all active customers in current filter context,
+--      then averages their ALL-TIME revenue (removing the date filter for the sum).
+Avg LTV VND =
+CALCULATE (
+    AVERAGEX (
+        VALUES ( fact_orders[customer_id] ),
+        CALCULATE (
+            SUM ( fact_orders[total_vnd] ),
+            REMOVEFILTERS ( dim_date )
+        )
+    ),
+    fact_orders[customer_id] <> -1
+)
+
+-- KPI: Average number of orders per active customer
+-- FIX: Calculate dynamically from fact_orders.
+Avg Orders Per Customer =
+CALCULATE (
+    AVERAGEX (
+        VALUES ( fact_orders[customer_id] ),
+        CALCULATE (
+            COUNTROWS ( fact_orders ),
+            REMOVEFILTERS ( dim_date )
+        )
+    ),
+    fact_orders[customer_id] <> -1
+)
+
+-- Measure: Customer segment count (for donut chart labels)
+Segment Customer Count =
+CALCULATE (
+    DISTINCTCOUNT ( dim_customers[customer_id] ),
+    dim_customers[customer_id] <> -1
+)
+
+-- Measure: Segment share % of total
+Segment Share % =
+DIVIDE (
+    [Segment Customer Count],
+    CALCULATE (
+        [Segment Customer Count],
+        ALL ( dim_customers[customer_segment] )
+    ),
+    0
+)
+
+-- Measure: New customers acquired within selected period
+-- FIX: Calculated from fact_orders so it correctly filters via dim_date relationship.
+New Customers = 
+VAR CurrentMinDate = MIN ( dim_date[full_date] )
+VAR CurrentMaxDate = MAX ( dim_date[full_date] )
+RETURN
+    CALCULATE (
+        DISTINCTCOUNT ( fact_orders[customer_id] ),
+        fact_orders[customer_id] <> -1,
+        -- Keep only customers whose very first order is within the current period
+        FILTER (
+            VALUES ( fact_orders[customer_id] ),
+            VAR FirstDateForCust = 
+                CALCULATE ( 
+                    MIN ( fact_orders[order_date] ), 
+                    REMOVEFILTERS ( dim_date ) 
+                )
+            RETURN FirstDateForCust >= CurrentMinDate && FirstDateForCust <= CurrentMaxDate
+        )
+    )
+
+-- Measure: Cumulative customers over time
+-- FIX: Calculated from fact_orders. ALL(dim_date) resets context, then we filter
+--      to all dates up to the current point on the X-axis. Also prevents drawing
+--      a flat line into future dates (e.g. 2027) when there is no more data.
+Cumulative Customers =
+VAR MaxDate = MAX ( dim_date[full_date] )
+VAR MaxFactDate = CALCULATE ( MAX ( fact_orders[order_date] ), REMOVEFILTERS () )
+RETURN
+    IF (
+        MIN ( dim_date[full_date] ) > MaxFactDate,
+        BLANK (),
+        CALCULATE (
+            DISTINCTCOUNT ( fact_orders[customer_id] ),
+            fact_orders[customer_id] <> -1,
+            -- Exclude the 400k orphan records by requiring the ID to exist in dim_customers
+            fact_orders[customer_id] IN VALUES ( dim_customers[customer_id] ),
+            FILTER (
+                ALL ( dim_date ),
+                dim_date[full_date] <= MaxDate
+            )
+        )
+    )
+
+-- Measure: Revenue by channel
+Revenue By Channel =
+CALCULATE (
+    SUM ( fact_orders[total_vnd] ),
+    NOT ISBLANK ( fact_orders[channel] )
+)
+
+-- Measure: Order count by channel
+Orders By Channel =
+COUNTROWS ( FILTER ( fact_orders, NOT ISBLANK ( fact_orders[channel] ) ) )
+
+-- Calculated Column (add to dim_customers table):
+-- Customer Tier — emoji label for slicer/table visuals
+-- Customer Tier =
+-- SWITCH (
+--     TRUE (),
+--     dim_customers[customer_segment] = "VIP / Best Customers", "🏆 VIP",
+--     dim_customers[customer_segment] = "Growing / Potential",  "🌱 Growing",
+--     dim_customers[customer_segment] = "At Risk",              "🔴 At Risk",
+--     dim_customers[customer_segment] = "Needs Attention",      "⚠️ Attention",
+--     dim_customers[customer_segment] = "Lost / Inactive",      "❌ Lost",
+--     "⬜ No Purchase"
+-- )
+
+
+-- ─────────────────────────────────────────────────────────────
+-- SECTION 2: DASHBOARD 2 — CASHFLOW
+-- Source tables: vw_cashflow_daily, fact_bank_transactions
+-- ─────────────────────────────────────────────────────────────
+-- ┌──────────────────────────────────────────────────────────────────────────┐
+-- │  TOP ROW SCORE CARDS (5 cards, left → right):                           │
+-- │  [1] Total Sales Revenue  [2] Total Payments Received  [3] Net Cashflow│
+-- │  [4] Revenue MoM Growth %   [5] Payment Success Rate %                  │
+-- └──────────────────────────────────────────────────────────────────────────┘
+
+-- KPI: Total sales revenue (excluding cancelled/refunded — filtered in view)
+Total Sales Revenue =
+SUM ( vw_cashflow_daily[sales_revenue_vnd] )
+
+-- KPI: Total payments actually received (successful only)
+Total Payments Received =
+SUM ( vw_cashflow_daily[payments_received_vnd] )
+
+-- KPI: Total bank inflows
+Total Bank Inflow =
+SUM ( vw_cashflow_daily[bank_inflow_vnd] )
+
+-- KPI: Total bank outflows
+Total Bank Outflow =
+SUM ( vw_cashflow_daily[bank_outflow_vnd] )
+
+-- KPI: Net cashflow (sales revenue minus bank outflow, from view)
+Net Cashflow =
+SUM ( vw_cashflow_daily[net_cashflow_vnd] )
+
+-- KPI: Total order count from cashflow view
+Total Order Count =
+SUM ( vw_cashflow_daily[order_count] )
+
+-- Measure: Successful payments count
+Successful Payments =
+SUM ( vw_cashflow_daily[successful_payments] )
+
+-- Measure: Failed payments count
+Failed Payments =
+SUM ( vw_cashflow_daily[failed_payments] )
+
+-- Measure: Payment success rate %
+Payment Success Rate % =
+DIVIDE (
+    [Successful Payments],
+    [Successful Payments] + [Failed Payments],
+    0
+)
+
+-- Measure: Collection rate (payments received vs revenue booked)
+Collection Rate % =
+DIVIDE (
+    [Total Payments Received],
+    [Total Sales Revenue],
+    0
+)
+
+-- Measure: Revenue Month-over-Month growth %
+Revenue MoM Growth % =
+VAR CurrentRevenue = [Total Sales Revenue]
+VAR PreviousRevenue =
+    CALCULATE (
+        [Total Sales Revenue],
+        DATEADD ( dim_date[full_date], -1, MONTH )
+    )
+RETURN
+    DIVIDE ( CurrentRevenue - PreviousRevenue, PreviousRevenue, BLANK () )
+
+-- Measure: Revenue Year-over-Year growth %
+Revenue YoY Growth % =
+VAR CurrentRevenue = [Total Sales Revenue]
+VAR PreviousRevenue =
+    CALCULATE (
+        [Total Sales Revenue],
+        SAMEPERIODLASTYEAR ( dim_date[full_date] )
+    )
+RETURN
+    DIVIDE ( CurrentRevenue - PreviousRevenue, PreviousRevenue, BLANK () )
+
+-- Measure: Average daily revenue
+Avg Daily Revenue =
+AVERAGEX (
+    VALUES ( vw_cashflow_daily[report_date] ),
+    CALCULATE ( SUM ( vw_cashflow_daily[sales_revenue_vnd] ) )
+)
+
+-- Measure: Cashflow status label (for conditional card color)
+Cashflow Status =
+IF ( [Net Cashflow] >= 0, "Positive ▲", "Negative ▼" )
+
+
+-- ─────────────────────────────────────────────────────────────
+-- SECTION 3: DASHBOARD 3 — PAYMENT STATUS
+-- Source tables: vw_payment_status, dim_customers
+-- ─────────────────────────────────────────────────────────────
+-- ┌──────────────────────────────────────────────────────────────────────────┐
+-- │  TOP ROW SCORE CARDS (5 cards, left → right):                           │
+-- │  [1] PS Total Orders  [2] Paid Orders  [3] Payment Rate %               │
+-- │  [4] Total Outstanding VND   [5] Avg Payment Delay Hours                │
+-- └──────────────────────────────────────────────────────────────────────────┘
+
+-- KPI: Total orders tracked in payment status view
+PS Total Orders =
+COUNTROWS ( vw_payment_status )
+
+-- KPI: Paid orders count
+Paid Orders =
+CALCULATE (
+    COUNTROWS ( vw_payment_status ),
+    vw_payment_status[payment_status_category] = "Paid"
+)
+
+-- KPI: Failed orders count
+Failed Orders =
+CALCULATE (
+    COUNTROWS ( vw_payment_status ),
+    vw_payment_status[payment_status_category] = "Failed"
+)
+
+-- KPI: Pending orders count
+Pending Orders =
+CALCULATE (
+    COUNTROWS ( vw_payment_status ),
+    vw_payment_status[payment_status_category] = "Pending"
+)
+
+-- KPI: Overdue orders count
+Overdue Orders =
+CALCULATE (
+    COUNTROWS ( vw_payment_status ),
+    vw_payment_status[payment_status_category] = "Overdue"
+)
+
+-- KPI: Total outstanding amount (VND) — unpaid orders only
+Total Outstanding VND =
+CALCULATE (
+    SUM ( vw_payment_status[outstanding_amount_vnd] ),
+    vw_payment_status[payment_status_category] <> "Paid"
+)
+
+-- KPI: Average payment delay for paid orders (hours)
+Avg Payment Delay Hours =
+CALCULATE (
+    AVERAGE ( vw_payment_status[payment_delay_hours] ),
+    NOT ISBLANK ( vw_payment_status[payment_delay_hours] )
+)
+
+-- Measure: Payment rate % (paid / total orders)
+Payment Rate % =
+DIVIDE ( [Paid Orders], [PS Total Orders], 0 )
+
+-- Measure: Outstanding amount as % of total order value
+Outstanding Rate % =
+DIVIDE (
+    [Total Outstanding VND],
+    SUM ( vw_payment_status[total_vnd] ),
+    0
+)
+
+-- Measure: Overdue amount (VND)
+Overdue Amount VND =
+CALCULATE (
+    SUM ( vw_payment_status[outstanding_amount_vnd] ),
+    vw_payment_status[payment_status_category] = "Overdue"
+)
+
+-- Measure: Gateway success rate (for gateway performance chart)
+Gateway Success Rate % =
+DIVIDE (
+    CALCULATE (
+        COUNTROWS ( vw_payment_status ),
+        vw_payment_status[gateway_payment_status] = "success"
+    ),
+    COUNTROWS ( vw_payment_status ),
+    0
+)
+
+-- Measure: Dynamic payment health status label
+Payment Health Status =
+VAR OverdueCount = [Overdue Orders]
+VAR FailedCount  = [Failed Orders]
+RETURN
+    IF (
+        OverdueCount > 0,
+        "⚠️ " & OverdueCount & " orders overdue",
+        IF ( FailedCount > 0, "❌ " & FailedCount & " failed", "✅ All clear" )
+    )
+
+-- Calculated Column (add to vw_payment_status table):
+-- Delay Bucket — for histogram visual on payment delay distribution
+-- Delay Bucket =
+-- SWITCH (
+--     TRUE (),
+--     ISBLANK ( vw_payment_status[payment_delay_hours] ), "N/A (Unpaid)",
+--     vw_payment_status[payment_delay_hours] <= 1,        "1. 0–1 hr",
+--     vw_payment_status[payment_delay_hours] <= 6,        "2. 1–6 hrs",
+--     vw_payment_status[payment_delay_hours] <= 24,       "3. 6–24 hrs",
+--     vw_payment_status[payment_delay_hours] <= 72,       "4. 1–3 days",
+--     "5. 3+ days"
+-- )
+
+-- Calculated Column (add to vw_payment_status table):
+-- Aging Bucket — to group unpaid/overdue orders by days overdue
+-- FIX: Calculates relative to the most recent date in the dataset, preventing static data from appearing as 60+ days overdue
+-- Aging Bucket =
+-- VAR MaxDataDate = MAXX(ALL(vw_payment_status), vw_payment_status[order_date])
+-- VAR AdjustedDaysOverdue = DATEDIFF(vw_payment_status[order_date], MaxDataDate, DAY)
+-- RETURN SWITCH (
+--     TRUE (),
+--     vw_payment_status[payment_status_category] = "Paid", "Paid",
+--     AdjustedDaysOverdue <= 7,  "1. 0-7 days",
+--     AdjustedDaysOverdue <= 14, "2. 8-14 days",
+--     AdjustedDaysOverdue <= 30, "3. 15-30 days",
+--     AdjustedDaysOverdue <= 60, "4. 31-60 days",
+--     "5. 60+ days"
+-- )
+
+-- Calculated Column (add to vw_payment_status table):
+-- Risk Score — evaluates the risk of non-payment (0: No risk, 5: Critical)
+-- FIX: Calculates relative to the most recent date in the dataset
+-- Risk Score =
+-- VAR MaxDataDate = MAXX(ALL(vw_payment_status), vw_payment_status[order_date])
+-- VAR AdjustedDaysOverdue = DATEDIFF(vw_payment_status[order_date], MaxDataDate, DAY)
+-- RETURN SWITCH (
+--     TRUE (),
+--     vw_payment_status[payment_status_category] = "Paid", 0,
+--     AdjustedDaysOverdue <= 7,  1,
+--     AdjustedDaysOverdue <= 14, 2,
+--     AdjustedDaysOverdue <= 30, 3,
+--     AdjustedDaysOverdue <= 60, 4,
+--     5
+-- )
+
+
+-- ─────────────────────────────────────────────────────────────
+-- SECTION 4: FORMATTING REFERENCE
+-- ─────────────────────────────────────────────────────────────
+
+-- VND Currency format string (Format pane → Custom):
+--   #,##0 "₫"
+
+-- Percentage format:
+--   0.0%
+
+-- Date format (Vietnamese locale):
+--   DD/MM/YYYY
+
+-- Large number display (in KPI card → Format → Display units):
+--   Set to "Thousands" or "Millions" depending on scale
+
+-- Conditional formatting thresholds:
+--   Net Cashflow        : < 0           → Red (#E74C3C)
+--                       : >= 0          → Green (#2ECC71)
+--   Payment Rate %      : < 70%         → Red
+--                       : 70% – 90%    → Amber (#F39C12)
+--                       : > 90%         → Green
+--   Outstanding Rate %  : > 10%         → Red background on cell
+--   Days Overdue        : > 60 days     → Bold red font in table
+
+-- ─────────────────────────────────────────────────────────────
+-- COLOR PALETTE (for consistent cross-dashboard theming)
+-- ─────────────────────────────────────────────────────────────
+-- VIP Gold:           #F1C40F
+-- Growing Green:      #27AE60
+-- Positive Green:     #2ECC71
+-- Warning Amber:      #F39C12
+-- Danger Red:         #E74C3C
+-- Needs Attn Orange:  #E67E22
+-- At Risk Red:        #C0392B
+-- Lost Gray:          #7F8C8D
+-- Neutral Gray:       #95A5A6
+-- Accent Blue:        #3498DB
+-- Dark Navy BG:       #1A2332
+-- Card Background:    #243447
+-- White Text:         #ECF0F1

@@ -226,6 +226,37 @@ class PipelineOrchestrator:
                 shopify_orders, sapo_orders, online_orders
             )
 
+            # ────────────────────────────────────
+            # DATA QUALITY: Drop Orphan Orders
+            # ────────────────────────────────────
+            self.logger.info("Applying strict referential integrity filters...")
+            
+            # 1. Identify valid customers (allow -1 for unknown/walk-in)
+            valid_customers = set(self.transformed["dim_customers"]["customer_id"])
+            valid_customers.add(-1)
+
+            # 2. Filter fact_orders
+            fact_orders = self.transformed["fact_orders"]
+            initial_orders_count = len(fact_orders)
+            fact_orders = fact_orders[fact_orders["customer_id"].isin(valid_customers)]
+            self.transformed["fact_orders"] = fact_orders
+            
+            dropped_orders = initial_orders_count - len(fact_orders)
+            if dropped_orders > 0:
+                self.logger.warning(f"  Dropped {dropped_orders:,} orphan orders (customer_id not in dim_customers)")
+
+            # 3. Filter fact_order_items (must match valid order_keys)
+            fact_order_items = self.transformed["fact_order_items"]
+            initial_items_count = len(fact_order_items)
+            valid_orders = set(fact_orders["order_key"])
+            fact_order_items = fact_order_items[fact_order_items["order_key"].isin(valid_orders)]
+            self.transformed["fact_order_items"] = fact_order_items
+            
+            dropped_items = initial_items_count - len(fact_order_items)
+            if dropped_items > 0:
+                self.logger.warning(f"  Dropped {dropped_items:,} orphan order items")
+
+
             # Free raw order data
             del shopify_orders, sapo_orders, online_orders
             _force_gc()
